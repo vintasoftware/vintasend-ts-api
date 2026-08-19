@@ -89,7 +89,7 @@ renderer to use is a deployment decision. Point `VINTASEND_SERVICE_MODULE` at a
 module that default-exports a factory returning a configured VintaSend service:
 
 ```ts
-// vintasend.config.ts
+// src/vintasend.config.ts
 import { VintaSendFactory } from 'vintasend';
 
 export default async function createVintaSendService() {
@@ -101,20 +101,21 @@ export default async function createVintaSendService() {
 }
 ```
 
-Start from [`vintasend.config.example.ts`](./vintasend.config.example.ts). The
-factory is called once at startup, and a failure there stops the server rather
-than surfacing on the first request.
+Start from [`src/vintasend.config.example.ts`](./src/vintasend.config.example.ts),
+copying it to `src/vintasend.config.ts` (gitignored) so it is compiled along with
+the rest of `src`. The factory is called once at startup, and a failure there
+stops the server rather than surfacing on the first request.
 
-`VINTASEND_SERVICE_MODULE` accepts a path relative to the working directory
-(resolved against the compiled output — `./vintasend.config.js` — when running
-`npm start`) or a bare package specifier.
+`VINTASEND_SERVICE_MODULE` accepts a path relative to the working directory or a
+bare package specifier. Use `./dist/vintasend.config.js` with `npm start`, and
+`./src/vintasend.config.ts` with `npm run dev`, which runs TypeScript directly.
 
 ## Environment variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `VINTASEND_API_KEY` | yes | Shared secret clients must send as a bearer token. |
-| `VINTASEND_SERVICE_MODULE` | no | Module building your VintaSend service. Defaults to `./vintasend.config.js`. |
+| `VINTASEND_SERVICE_MODULE` | no | Module building your VintaSend service. Defaults to `./dist/vintasend.config.js`. |
 | `VINTASEND_BACKEND_IDENTIFIER` | no | Read from a non-primary backend registered in your service. |
 | `VINTASEND_API_CORS_ORIGINS` | no | Comma-separated browser origins allowed to call the API. |
 | `PORT` / `HOST` | no | Listen address. Defaults to `3333` / `0.0.0.0`. |

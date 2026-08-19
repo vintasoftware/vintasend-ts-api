@@ -14,7 +14,7 @@ export type ServerConfig = {
 
 const DEFAULT_PORT = 3333;
 const DEFAULT_HOST = '0.0.0.0';
-const DEFAULT_SERVICE_MODULE = './vintasend.config.js';
+const DEFAULT_SERVICE_MODULE = './dist/vintasend.config.js';
 
 function splitList(value: string | undefined): string[] {
   if (!value) {

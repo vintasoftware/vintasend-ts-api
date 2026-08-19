@@ -4,7 +4,7 @@
  * The API ships no backend of its own: which database, adapters and template
  * renderers to use is a deployment decision. `VINTASEND_SERVICE_MODULE` points
  * at a module whose default export builds a configured VintaSend service; see
- * `vintasend.config.example.ts` and the README.
+ * `src/vintasend.config.example.ts` and the README.
  */
 
 import { isAbsolute, resolve } from 'node:path';

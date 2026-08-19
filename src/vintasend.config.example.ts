@@ -1,9 +1,11 @@
 /**
  * Example VintaSend service factory.
  *
- * Copy this file to `vintasend.config.ts` (gitignored), adapt it to your own
- * backend, adapters and template renderer, then point the API at the compiled
- * output with `VINTASEND_SERVICE_MODULE=./vintasend.config.js`.
+ * Copy this file to `src/vintasend.config.ts` (gitignored) and adapt it to your
+ * own backend, adapters and template renderer. It is compiled with the rest of
+ * `src`, so the running server finds it at
+ * `VINTASEND_SERVICE_MODULE=./dist/vintasend.config.js` — or, under `npm run
+ * dev`, directly at `./src/vintasend.config.ts`.
  *
  * The only contract is: default-export a function returning a configured
  * VintaSend service (or a promise of one). The API calls it once at startup.

@@ -15,7 +15,7 @@ describe('loadServerConfig', () => {
       host: '0.0.0.0',
       apiKey: 'secret',
       corsOrigins: [],
-      serviceModule: './vintasend.config.js',
+      serviceModule: './dist/vintasend.config.js',
       backendIdentifier: undefined,
     });
   });
