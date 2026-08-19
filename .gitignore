@@ -9,8 +9,6 @@ coverage
 !.env.example
 
 # Operator-provided service factory (see README)
-vintasend.config.ts
-vintasend.config.js
-vintasend.config.mjs
+src/vintasend.config.ts
 
 .DS_Store
