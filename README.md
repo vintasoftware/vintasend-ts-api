@@ -1,9 +1,156 @@
 # VintaSend API
 
 REST API that exposes a [VintaSend](https://github.com/vintasoftware/vintasend-ts)
-notification service over HTTP, so the
-[VintaSend dashboard](https://github.com/vintasoftware/vintasend-ts-dashboard)
-can consume notifications through a stable contract instead of embedding a
-notification service of its own.
+notification service over HTTP.
 
-The implementation lands via pull request.
+It exists so the [VintaSend dashboard](https://github.com/vintasoftware/vintasend-ts-dashboard)
+no longer has to embed a notification service: the dashboard is now a pure API
+client, and any implementation of this contract can serve it — including a
+future one built on the Python `vintasend` package.
+
+**[`openapi.yaml`](./openapi.yaml) is the contract.** This repository is the
+TypeScript reference implementation of it.
+
+## Architecture
+
+```
+┌─────────────────────┐   HTTPS + API key    ┌──────────────────┐
+│  Dashboard (Next)   │ ───────────────────▶ │  vintasend-api   │
+│  server-side only   │ ◀─────────────────── │  (this repo)     │
+└─────────────────────┘     JSON contract    └────────┬─────────┘
+                                                      │
+                                       ┌──────────────┴──────────────┐
+                                       │  Your VintaSend service     │
+                                       │  backend + adapters +       │
+                                       │  template renderer          │
+                                       └─────────────────────────────┘
+```
+
+The API owns everything that needs backend credentials — database access,
+template rendering, GitHub template lookups. The UI owns presentation and user
+authentication.
+
+## Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Liveness probe (unauthenticated) |
+| GET | `/api/v1/capabilities` | Filter/order capabilities of the configured backend |
+| GET | `/api/v1/notifications` | List notifications with filters, ordering and pagination |
+| GET | `/api/v1/notifications/pending` | Notifications awaiting send |
+| GET | `/api/v1/notifications/future` | Notifications scheduled for the future |
+| GET | `/api/v1/notifications/one-off` | One-off notifications |
+| GET | `/api/v1/notifications/{id}` | One notification, including context payloads |
+| GET | `/api/v1/notifications/{id}/preview` | Templates rendered at the notification's commit |
+| POST | `/api/v1/notifications/{id}/resend` | Resend a notification |
+| POST | `/api/v1/notifications/{id}/cancel` | Cancel a pending notification |
+
+Conventions worth knowing when implementing this contract elsewhere:
+
+- `page` is **1-indexed** in the API; VintaSend backends are 0-indexed, and the
+  server does that conversion.
+- `hasMore` is `true` when a page comes back full. Backends are not required to
+  produce a total count.
+- List rows carry a `kind` field (`user` or `one-off`) so clients can
+  discriminate without sniffing for the presence of fields.
+- Timestamps are ISO-8601 UTC strings, `null` when unset — never `undefined`.
+- Errors always use the envelope `{ "error": { "code", "message", "details"? } }`.
+
+## Authentication
+
+Every `/api/v1` request must carry the shared secret:
+
+```
+Authorization: Bearer $VINTASEND_API_KEY
+```
+
+The dashboard calls this API only from its own server side, so the key never
+reaches a browser. If you do need to call the API from a browser, set
+`VINTASEND_API_CORS_ORIGINS` to the allowed origins — and put a per-user auth
+layer in front of it first.
+
+## Getting started
+
+```bash
+npm install
+cp .env.example .env
+```
+
+Then configure the service the API should read from (below), and run:
+
+```bash
+npm run dev
+```
+
+## Configuring your VintaSend service
+
+The API ships no backend of its own: which database, adapters and template
+renderer to use is a deployment decision. Point `VINTASEND_SERVICE_MODULE` at a
+module that default-exports a factory returning a configured VintaSend service:
+
+```ts
+// vintasend.config.ts
+import { VintaSendFactory } from 'vintasend';
+
+export default async function createVintaSendService() {
+  const backend = /* your backend */;
+  const renderer = /* your template renderer */;
+  const adapter = /* your notification adapter */;
+
+  return new VintaSendFactory<Config>().create(backend, [adapter], contextGenerators);
+}
+```
+
+Start from [`vintasend.config.example.ts`](./vintasend.config.example.ts). The
+factory is called once at startup, and a failure there stops the server rather
+than surfacing on the first request.
+
+`VINTASEND_SERVICE_MODULE` accepts a path relative to the working directory
+(resolved against the compiled output — `./vintasend.config.js` — when running
+`npm start`) or a bare package specifier.
+
+## Environment variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `VINTASEND_API_KEY` | yes | Shared secret clients must send as a bearer token. |
+| `VINTASEND_SERVICE_MODULE` | no | Module building your VintaSend service. Defaults to `./vintasend.config.js`. |
+| `VINTASEND_BACKEND_IDENTIFIER` | no | Read from a non-primary backend registered in your service. |
+| `VINTASEND_API_CORS_ORIGINS` | no | Comma-separated browser origins allowed to call the API. |
+| `PORT` / `HOST` | no | Listen address. Defaults to `3333` / `0.0.0.0`. |
+| `GITHUB_REPO` | preview only | Repository holding the templates, as `owner/repo` or a full URL. |
+| `GITHUB_API_KEY` | preview only | Token with read access to that repository. |
+| `GITHUB_API_BASE_URL` | no | Defaults to `https://api.github.com`. |
+| `GITHUB_TEMPLATES_BASE_PATH` | no | Prefix added to template paths before the GitHub lookup. |
+
+The `GITHUB_*` variables are only read when `/preview` is called, so the API
+runs fine without them if you do not use template previews.
+
+## Development
+
+```bash
+npm run dev        # watch mode
+npm test           # vitest
+npm run typecheck  # tsc --noEmit
+npm run lint       # biome
+npm run build      # compile to dist/
+npm start          # run the compiled server
+```
+
+Tests drive the real Hono app through `app.request()` with an injected fake
+service, so they cover routing, auth, validation, filter negotiation and
+serialization without needing a database.
+
+## Implementing this contract in another language
+
+1. Read `openapi.yaml` — it is normative, including status codes and error codes.
+2. Mirror the pagination conversion, the `hasMore` rule, and the `kind`
+   discriminator exactly; the dashboard depends on all three.
+3. Negotiate string lookups and ordering against your backend's capabilities,
+   and report what you support from `/api/v1/capabilities`. Dropping an
+   unsupported ordering is correct; failing the request is not.
+4. Keep the error envelope identical — the dashboard branches on `error.code`.
+
+## License
+
+MIT
