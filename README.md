@@ -47,14 +47,20 @@ authentication.
 
 Conventions worth knowing when implementing this contract elsewhere:
 
-- `page` is **1-indexed** in the API; VintaSend backends are 0-indexed, and the
-  server does that conversion.
+- `page` is **1-indexed** in the API, in every implementation, and clients never
+  convert. What the backend wants is a separate question: the TypeScript
+  VintaSend backends are 0-indexed, the Python ones are 1-indexed. The offset
+  comes from the backend's `pagination.oneIndexed` capability — porting this
+  server's `page - 1` literally into a 1-indexed language is an off-by-one. The
+  capability is backend-facing and is not published by `/api/v1/capabilities`.
 - `hasMore` is `true` when a page comes back full. Backends are not required to
   produce a total count.
 - List rows carry a `kind` field (`user` or `one-off`) so clients can
   discriminate without sniffing for the presence of fields.
 - Timestamps are ISO-8601 UTC strings, `null` when unset — never `undefined`.
 - Errors always use the envelope `{ "error": { "code", "message", "details"? } }`.
+  Failures that come from the template source are `UPSTREAM_ERROR` (502), not a
+  generic 500.
 
 ## Authentication
 
@@ -145,12 +151,23 @@ serialization without needing a database.
 ## Implementing this contract in another language
 
 1. Read `openapi.yaml` — it is normative, including status codes and error codes.
-2. Mirror the pagination conversion, the `hasMore` rule, and the `kind`
-   discriminator exactly; the dashboard depends on all three.
-3. Negotiate string lookups and ordering against your backend's capabilities,
+2. Mirror the `hasMore` rule and the `kind` discriminator exactly; the dashboard
+   depends on both.
+3. Take the page offset from your backend's `pagination.oneIndexed` capability,
+   not from this implementation. The wire stays 1-indexed either way, so a
+   1-indexed backend passes the page straight through — no `- 1`. Apply it to
+   every paginated read, and keep the capability out of the `/capabilities`
+   response so no client converts on top of you.
+4. Treat `stringLookups.caseSensitive` and `stringLookups.caseInsensitive` as
+   independent: a backend can be incapable of either one, and deriving one from
+   the other declines the single lookup such a backend actually supports.
+5. Negotiate string lookups and ordering against your backend's capabilities,
    and report what you support from `/api/v1/capabilities`. Dropping an
    unsupported ordering is correct; failing the request is not.
-4. Keep the error envelope identical — the dashboard branches on `error.code`.
+6. Report template-source failures as `UPSTREAM_ERROR` (502) rather than a
+   generic 500: a rate-limited or unreachable template host is not a fault of
+   the API, and the dashboard shows the message to the operator.
+7. Keep the error envelope identical — the dashboard branches on `error.code`.
 
 ## License
 

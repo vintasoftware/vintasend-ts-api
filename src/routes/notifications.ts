@@ -15,6 +15,7 @@ import type {
   NotificationPreview,
   PaginatedResponse,
 } from '../contract/types.js';
+import { toWireCapabilities } from '../domain/capabilities.js';
 import { buildBackendFilter, buildOrderBy } from '../domain/filters.js';
 import {
   notificationListQuerySchema,
@@ -33,6 +34,7 @@ import type {
   ApiAnyDatabaseNotification,
   NotificationServicePort,
 } from '../services/notification-service-port.js';
+import { createPagedNotificationReader } from '../services/paged-notification-reader.js';
 import { validate } from './validation.js';
 
 export type NotificationRoutesDependencies = {
@@ -79,25 +81,30 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
   const routes = new Hono();
   const { backendIdentifier } = deps;
 
-  routes.get('/capabilities', async (c) => {
-    const service = await deps.getService();
-    const capabilities = await service.getBackendSupportedFilterCapabilities(backendIdentifier);
+  /**
+   * Reads pages the way the contract does: 1-indexed, translated for the backend.
+   */
+  const readerFor = async () =>
+    createPagedNotificationReader(await deps.getService(), backendIdentifier);
 
-    return c.json<DataResponse<FilterCapabilities>>({ data: capabilities });
+  routes.get('/capabilities', async (c) => {
+    const reader = await readerFor();
+
+    return c.json<DataResponse<FilterCapabilities>>({
+      data: toWireCapabilities(await reader.capabilities()),
+    });
   });
 
   routes.get('/notifications', validate('query', notificationListQuerySchema), async (c) => {
     const query = c.req.valid('query');
-    const service = await deps.getService();
-    const capabilities = await service.getBackendSupportedFilterCapabilities(backendIdentifier);
+    const reader = await readerFor();
+    const capabilities = await reader.capabilities();
 
-    const notifications = await service.filterNotifications(
+    const notifications = await reader.filterNotifications(
       buildBackendFilter(query, capabilities),
-      // The contract is 1-indexed; VintaSend backends are 0-indexed.
-      query.page - 1,
+      query.page,
       query.pageSize,
       buildOrderBy(query, capabilities),
-      backendIdentifier,
     );
 
     return c.json(paginate(notifications, query.page, query.pageSize));
@@ -105,36 +112,24 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
 
   routes.get('/notifications/pending', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
-    const service = await deps.getService();
-    const notifications = await service.getPendingNotifications(
-      page - 1,
-      pageSize,
-      backendIdentifier,
-    );
+    const reader = await readerFor();
+    const notifications = await reader.getPendingNotifications(page, pageSize);
 
     return c.json(paginate(notifications, page, pageSize));
   });
 
   routes.get('/notifications/future', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
-    const service = await deps.getService();
-    const notifications = await service.getFutureNotifications(
-      page - 1,
-      pageSize,
-      backendIdentifier,
-    );
+    const reader = await readerFor();
+    const notifications = await reader.getFutureNotifications(page, pageSize);
 
     return c.json(paginate(notifications, page, pageSize));
   });
 
   routes.get('/notifications/one-off', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
-    const service = await deps.getService();
-    const notifications = await service.getOneOffNotifications(
-      page - 1,
-      pageSize,
-      backendIdentifier,
-    );
+    const reader = await readerFor();
+    const notifications = await reader.getOneOffNotifications(page, pageSize);
 
     return c.json(paginate(notifications, page, pageSize));
   });

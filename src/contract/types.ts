@@ -126,7 +126,8 @@ export type NotificationListQuery = {
 };
 
 /**
- * Envelope returned by every paginated endpoint. `page` is 1-indexed.
+ * Envelope returned by every paginated endpoint. `page` is 1-indexed, whatever
+ * numbering the backend behind the API uses.
  */
 export type PaginatedResponse<T> = {
   data: T[];
@@ -146,6 +147,9 @@ export type DataResponse<T> = {
  * Filter capabilities advertised by the configured backend. Consumers use it to
  * hide sorting/filtering affordances the backend cannot honour. Keys mirror
  * VintaSend's capability keys (e.g. `orderBy.sentAt`, `stringLookups.includes`).
+ *
+ * They describe the backend, not the API: `pagination.oneIndexed` reports how
+ * the backend numbers pages, while the API's own `page` is always 1-indexed.
  */
 export type FilterCapabilities = Record<string, boolean>;
 
