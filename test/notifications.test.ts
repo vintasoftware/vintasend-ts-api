@@ -174,6 +174,25 @@ describe('GET /api/v1/notifications', () => {
     expect(service.filterNotifications).toHaveBeenCalledWith({}, 0, 20, undefined, undefined);
   });
 
+  it('passes the page straight through for a one-indexed backend', async () => {
+    const service = makeService({
+      getBackendSupportedFilterCapabilities: vi
+        .fn()
+        .mockResolvedValue({ 'pagination.zeroIndexed': false }),
+    });
+    const { app } = buildApp({ service });
+
+    await get(app, '/api/v1/notifications?page=2');
+
+    expect(service.filterNotifications).toHaveBeenCalledWith(
+      {},
+      2,
+      20,
+      expect.anything(),
+      undefined,
+    );
+  });
+
   it('forwards the configured backend identifier', async () => {
     const { app, service } = buildApp({ backendIdentifier: 'replica' });
 
@@ -223,6 +242,24 @@ describe('collection shortcuts', () => {
     expect(response.status).toBe(200);
     expect(service[method]).toHaveBeenCalledWith(1, 5, undefined);
     await expect(response.json()).resolves.toMatchObject({ page: 2, pageSize: 5 });
+  });
+
+  it.each([
+    ['/api/v1/notifications/pending', 'getPendingNotifications'],
+    ['/api/v1/notifications/future', 'getFutureNotifications'],
+    ['/api/v1/notifications/one-off', 'getOneOffNotifications'],
+  ] as const)('%s pages a one-indexed backend without an offset', async (path, method) => {
+    const service = makeService({
+      getBackendSupportedFilterCapabilities: vi
+        .fn()
+        .mockResolvedValue({ 'pagination.zeroIndexed': false }),
+      [method]: vi.fn().mockResolvedValue([]),
+    });
+    const { app } = buildApp({ service });
+
+    await get(app, `${path}?page=2&pageSize=5`);
+
+    expect(service[method]).toHaveBeenCalledWith(2, 5, undefined);
   });
 
   it('does not shadow the detail route with the shortcut routes', async () => {
@@ -370,6 +407,67 @@ describe('GET /api/v1/notifications/:id/preview', () => {
 
     expect(templateClient.getTemplateContentByCommit).toHaveBeenCalledTimes(1);
     expect(body.data.subjectTemplatePath).toBeNull();
+  });
+
+  it('reports an unreachable template source as an upstream error', async () => {
+    const service = makeService({
+      getNotification: vi.fn().mockResolvedValue(makeUserNotification()),
+    });
+    const templateClient = makeTemplateClient({
+      getTemplateContentByCommit: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('GitHub API rate limit exceeded while fetching template preview.'),
+        ),
+    });
+    const { app } = buildApp({ service, templateClient });
+
+    const response = await get(app, '/api/v1/notifications/notif-1/preview');
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'UPSTREAM_ERROR',
+        message: 'GitHub API rate limit exceeded while fetching template preview.',
+      },
+    });
+  });
+
+  it('reports a failed commit lookup as an upstream error', async () => {
+    const service = makeService({
+      getNotification: vi
+        .fn()
+        .mockResolvedValue(makeUserNotification({ gitCommitSha: null, status: 'PENDING_SEND' })),
+    });
+    const templateClient = makeTemplateClient({
+      getLatestMainCommitSha: vi
+        .fn()
+        .mockRejectedValue(new Error('Unable to resolve latest commit SHA from the main branch.')),
+    });
+    const { app } = buildApp({ service, templateClient });
+
+    const response = await get(app, '/api/v1/notifications/notif-1/preview');
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'UPSTREAM_ERROR' },
+    });
+  });
+
+  it('keeps a rendering failure an internal error', async () => {
+    // Rendering happens inside this API, so its failures are ours, not upstream.
+    const service = makeService({
+      getNotification: vi.fn().mockResolvedValue(makeUserNotification()),
+      renderEmailTemplateFromContent: vi.fn().mockRejectedValue(new Error('template blew up')),
+    });
+    const { app } = buildApp({ service });
+
+    const response = await get(app, '/api/v1/notifications/notif-1/preview');
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'INTERNAL_ERROR' },
+    });
   });
 
   it('reports an internal error without leaking backend details', async () => {

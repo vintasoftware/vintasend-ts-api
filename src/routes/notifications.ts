@@ -16,6 +16,7 @@ import type {
   PaginatedResponse,
 } from '../contract/types.js';
 import { buildBackendFilter, buildOrderBy } from '../domain/filters.js';
+import { toBackendPage } from '../domain/pagination.js';
 import {
   notificationListQuerySchema,
   paginationQuerySchema,
@@ -93,8 +94,7 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
 
     const notifications = await service.filterNotifications(
       buildBackendFilter(query, capabilities),
-      // The contract is 1-indexed; VintaSend backends are 0-indexed.
-      query.page - 1,
+      toBackendPage(query.page, capabilities),
       query.pageSize,
       buildOrderBy(query, capabilities),
       backendIdentifier,
@@ -106,8 +106,9 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
   routes.get('/notifications/pending', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
     const service = await deps.getService();
+    const capabilities = await service.getBackendSupportedFilterCapabilities(backendIdentifier);
     const notifications = await service.getPendingNotifications(
-      page - 1,
+      toBackendPage(page, capabilities),
       pageSize,
       backendIdentifier,
     );
@@ -118,8 +119,9 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
   routes.get('/notifications/future', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
     const service = await deps.getService();
+    const capabilities = await service.getBackendSupportedFilterCapabilities(backendIdentifier);
     const notifications = await service.getFutureNotifications(
-      page - 1,
+      toBackendPage(page, capabilities),
       pageSize,
       backendIdentifier,
     );
@@ -130,8 +132,9 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
   routes.get('/notifications/one-off', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
     const service = await deps.getService();
+    const capabilities = await service.getBackendSupportedFilterCapabilities(backendIdentifier);
     const notifications = await service.getOneOffNotifications(
-      page - 1,
+      toBackendPage(page, capabilities),
       pageSize,
       backendIdentifier,
     );
