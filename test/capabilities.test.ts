@@ -29,4 +29,22 @@ describe('toWireCapabilities', () => {
 
     expect(toWireCapabilities(capabilities)).toEqual(capabilities);
   });
+
+  it('passes new field capabilities through without needing to know them', () => {
+    // The filter is a denylist of backend-facing namespaces, so vocabulary added
+    // to the library — `fields.readAtRange` and its negation, for instance —
+    // reaches consumers with no change here.
+    const capabilities = {
+      'fields.readAtRange': false,
+      'negation.readAtRange': false,
+      'fields.sentAtRange': true,
+      'pagination.oneIndexed': true,
+    };
+
+    expect(toWireCapabilities(capabilities)).toEqual({
+      'fields.readAtRange': false,
+      'negation.readAtRange': false,
+      'fields.sentAtRange': true,
+    });
+  });
 });
