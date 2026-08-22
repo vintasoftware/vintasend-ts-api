@@ -44,6 +44,10 @@ export const notificationListQuerySchema = paginationQuerySchema.extend({
   subjectTemplate: nonEmptyString.optional(),
   contextName: nonEmptyString.optional(),
   tenant: nonEmptyString.optional(),
+  // `min(0)` rather than `min(1)`: the contract admits version 0, and rejecting it here would
+  // make a legal filter a 400.
+  requestedTemplateVersion: z.coerce.number().int().min(0).optional(),
+  usedTemplateVersion: z.coerce.number().int().min(0).optional(),
   createdAtFrom: isoDateSchema.optional(),
   createdAtTo: isoDateSchema.optional(),
   sentAtFrom: isoDateSchema.optional(),

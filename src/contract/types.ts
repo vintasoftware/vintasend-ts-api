@@ -52,6 +52,18 @@ type NotificationBase = {
   bodyTemplate: string;
   subjectTemplate: string | null;
   gitCommitSha: string | null;
+  /**
+   * The template version this notification asked for, pinned when it was created or updated.
+   * `null` means it was left unpinned and renders whatever version is current at send time.
+   * Always `null` when the service's template renderer has no versions.
+   */
+  requestedTemplateVersion: number | null;
+  /**
+   * The template version the renderer reported after the notification was sent. `null` until it
+   * has been sent, and always `null` when the template renderer has no versions. On an unpinned
+   * notification this is the only record of what went out.
+   */
+  usedTemplateVersion: number | null;
   tenant: string | null;
 };
 
@@ -117,6 +129,10 @@ export type NotificationListQuery = {
   subjectTemplate?: string;
   contextName?: string;
   tenant?: string;
+  /** Notifications pinned to this template version. Unpinned notifications never match. */
+  requestedTemplateVersion?: number;
+  /** Notifications that rendered this template version. Unsent notifications never match. */
+  usedTemplateVersion?: number;
   createdAtFrom?: string;
   createdAtTo?: string;
   sentAtFrom?: string;

@@ -52,6 +52,20 @@ export function buildBackendFilter(
   if (query.userId) filter.userId = query.userId;
   if (query.tenant) filter.tenant = query.tenant;
 
+  // Compared against undefined rather than tested for truthiness: version 0 is a legitimate value
+  // the query schema accepts, and `if (query.requestedTemplateVersion)` would drop it.
+  //
+  // Not capability-gated, matching the Python implementation. Both fields default to unsupported
+  // in VintaSend's capability map, so gating them here would silently drop the filter for every
+  // backend that has not opted in — and a filter the backend ignores returns too many rows rather
+  // than too few, which a caller can see. Read `/capabilities` to know whether it will bite.
+  if (query.requestedTemplateVersion !== undefined) {
+    filter.requestedTemplateVersion = query.requestedTemplateVersion;
+  }
+  if (query.usedTemplateVersion !== undefined) {
+    filter.usedTemplateVersion = query.usedTemplateVersion;
+  }
+
   if (query.bodyTemplate) {
     filter.bodyTemplate = buildStringFilter(query.bodyTemplate, capabilities);
   }

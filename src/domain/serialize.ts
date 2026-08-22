@@ -63,6 +63,10 @@ function serializeSharedFields(notification: ApiAnyDatabaseNotification) {
     bodyTemplate: notification.bodyTemplate,
     subjectTemplate: notification.subjectTemplate,
     gitCommitSha: notification.gitCommitSha,
+    // `?? null` because a backend that does not store them leaves them undefined, and the
+    // contract types both as nullable rather than optional.
+    requestedTemplateVersion: notification.requestedTemplateVersion ?? null,
+    usedTemplateVersion: notification.usedTemplateVersion ?? null,
     tenant: notification.tenant,
   };
 }
