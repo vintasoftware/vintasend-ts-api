@@ -1,6 +1,10 @@
 {
   "name": "vintasend-api",
   "version": "1.0.0-alpha1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vintasoftware/vintasend-ts-api.git"
+  },
   "description": "REST API that exposes a VintaSend notification service over HTTP for the VintaSend dashboard UI",
   "license": "MIT",
   "author": "Vinta Software",
