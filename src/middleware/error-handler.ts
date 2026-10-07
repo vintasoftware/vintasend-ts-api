@@ -1,13 +1,29 @@
 /**
- * Maps thrown errors to the contract's error envelope. Unexpected errors are
- * logged in full but reported generically, so backend internals never leak.
+ * Maps thrown errors to the contract's error envelope.
+ *
+ * Unexpected errors are reported generically, so backend internals never leak to a client. They
+ * are not logged whole either: an error from a notification backend or provider can quote
+ * notification content, recipients or context values, and the applications this API serves
+ * handle health data. The log line names the error, a request id and the route, nothing else.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import type { ApiErrorResponse } from '../contract/types.js';
 import { ApiError } from '../errors.js';
+
+export const REQUEST_ID_HEADER = 'x-request-id';
+
+/** Only a request id that cannot break a log line out of its field is taken from the client. */
+const SAFE_REQUEST_ID = /^[A-Za-z0-9._-]{1,128}$/;
+
+/** The caller's `X-Request-Id` when it is safe to log, otherwise a fresh one. */
+export function requestIdFor(c: Context): string {
+  const supplied = c.req.header(REQUEST_ID_HEADER);
+  return supplied !== undefined && SAFE_REQUEST_ID.test(supplied) ? supplied : randomUUID();
+}
 
 export function handleError(error: Error, c: Context): Response {
   if (error instanceof ApiError) {
@@ -21,8 +37,14 @@ export function handleError(error: Error, c: Context): Response {
     );
   }
 
-  console.error('[vintasend-api] unhandled error', error);
+  // `name` rather than the constructor's name: some backends' errors come from minified bundles.
+  const requestId = requestIdFor(c);
+  console.error(
+    `[vintasend-api] unhandled ${error.name || 'Error'} (request ${requestId}) on ` +
+      `${c.req.method} ${c.req.routePath}`,
+  );
 
+  c.header(REQUEST_ID_HEADER, requestId);
   return c.json<ApiErrorResponse>(
     {
       error: {
