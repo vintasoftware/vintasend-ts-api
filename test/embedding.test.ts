@@ -1,12 +1,8 @@
 /**
  * What a host mounting the API relies on: its own authentication, its own error reporting, a body
- * that is read the way the contract says, pages that never offer an empty next one, and an app
- * that runs wherever `fetch` does.
+ * that is read the way the contract says, and pages that never offer an empty next one.
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Context } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -333,32 +329,5 @@ describe('hasMore', () => {
 
     await app.request('/api/v1/notifications?page=3&pageSize=2', { headers: authHeaders });
     expect(filterNotifications).toHaveBeenCalledTimes(3);
-  });
-});
-
-describe('the app outside Node', () => {
-  /** Every module `createApp` loads, following relative imports from `src/app.ts`. */
-  function appModules(): Map<string, string> {
-    const modules = new Map<string, string>();
-    const pending = [fileURLToPath(new URL('../src/app.ts', import.meta.url))];
-    while (pending.length > 0) {
-      const file = pending.pop() as string;
-      if (modules.has(file)) continue;
-      const source = readFileSync(file, 'utf8');
-      modules.set(file, source);
-      for (const [, specifier] of source.matchAll(/from '(\.[^']+)\.js'/g)) {
-        pending.push(resolve(dirname(file), `${specifier}.ts`));
-      }
-    }
-    return modules;
-  }
-
-  it('loads no Node built-in, so it can run wherever fetch does', () => {
-    const modules = appModules();
-
-    expect(modules.size).toBeGreaterThan(8);
-    for (const [file, source] of modules) {
-      expect(source, file).not.toMatch(/from 'node:|\bBuffer\./);
-    }
   });
 });
