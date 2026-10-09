@@ -149,6 +149,10 @@ export type PaginatedResponse<T> = {
   data: T[];
   page: number;
   pageSize: number;
+  /**
+   * True when the next page has at least one row, so a list that exactly fills its last page
+   * never offers an empty one. There is no total: backends are not required to count.
+   */
   hasMore: boolean;
 };
 
@@ -194,6 +198,7 @@ export type CancelledNotification = {
 export type ApiErrorCode =
   | 'BAD_REQUEST'
   | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'PREVIEW_UNAVAILABLE'
@@ -201,7 +206,21 @@ export type ApiErrorCode =
   | 'INTERNAL_ERROR';
 
 /**
+ * One thing wrong with a request, in a 400's `details.issues`.
+ *
+ * `path` is the dotted field, and empty for the body as a whole or for a refusal that names no
+ * field.
+ */
+export type ApiErrorIssue = {
+  path: string;
+  message: string;
+};
+
+/**
  * Error envelope returned with every non-2xx response.
+ *
+ * Every 400 carries `details.issues: ApiErrorIssue[]`, whatever the mistake was, and may carry
+ * other keys beside it.
  */
 export type ApiErrorResponse = {
   error: {

@@ -1,0 +1,93 @@
+/**
+ * Who is calling, and whether they may.
+ *
+ * Every `/api/v1` request goes through one `Authenticator` before it reaches a route. It refuses a
+ * caller by throwing — `ApiError.unauthorized` when no valid credential was presented,
+ * `ApiError.forbidden` when it knows who the caller is and they may not do this.
+ *
+ * The type is the one `vintasend-templates-management-api` takes, so a host mounting both APIs
+ * passes them the same function. This API records no attribution, so an `actor` it returns is
+ * available to the routes through `authenticated(c)` but nothing here writes it anywhere.
+ *
+ * A host that authenticates its own users passes an authenticator reading its session. A
+ * deployment with one shared secret passes `apiKeyAuthenticator(key)`.
+ */
+
+import type { Context, MiddlewareHandler } from 'hono';
+
+import { ApiError } from '../errors.js';
+
+/** What an authenticator learned about the caller. */
+export type Authenticated = {
+  /**
+   * Who is calling, when the credential says. The templates management API records it on status
+   * changes; this one keeps no audit trail, so it is accepted and unused.
+   */
+  actor?: string | null;
+};
+
+/** Refuses the caller by throwing an `ApiError`, or says who they are. */
+export type Authenticator = (c: Context) => Authenticated | Promise<Authenticated>;
+
+const AUTHENTICATED = 'vintasend-templates-management-api.authenticated';
+
+/** Runs `authenticate` on every request it guards, and keeps what it learned for the routes. */
+export function authenticateWith(authenticate: Authenticator): MiddlewareHandler {
+  return async (c, next) => {
+    c.set(AUTHENTICATED, await authenticate(c));
+    await next();
+  };
+}
+
+/** What the authenticator learned about this request's caller. */
+export function authenticated(c: Context): Authenticated {
+  return (c.get(AUTHENTICATED) as Authenticated | undefined) ?? {};
+}
+
+const encoder = new TextEncoder();
+
+async function sha256(value: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)));
+}
+
+/**
+ * Compare two secrets in time that depends on neither, so a wrong key cannot be found one
+ * character at a time.
+ *
+ * Both are hashed first, so the comparison is always of two 32-byte digests and the length of the
+ * expected key does not leak either. Web Crypto rather than `node:crypto`, so the app runs
+ * wherever `fetch` does.
+ */
+async function safeEquals(a: string, b: string): Promise<boolean> {
+  const [left, right] = await Promise.all([sha256(a), sha256(b)]);
+  let difference = 0;
+  left.forEach((byte, index) => {
+    difference |= byte ^ (right[index] ?? 0);
+  });
+  return difference === 0;
+}
+
+function extractToken(header: string | undefined): string | undefined {
+  if (!header) {
+    return undefined;
+  }
+
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim();
+}
+
+/**
+ * The shared-secret authenticator: every request must carry `Authorization: Bearer <apiKey>`.
+ * It says nothing about who is calling.
+ */
+export function apiKeyAuthenticator(apiKey: string): Authenticator {
+  return async (c) => {
+    const token = extractToken(c.req.header('authorization'));
+
+    if (!token || !(await safeEquals(token, apiKey))) {
+      throw ApiError.unauthorized('A valid API key is required.');
+    }
+
+    return {};
+  };
+}

@@ -1,8 +1,13 @@
-import type { ApiErrorCode, ApiErrorResponse, JsonValue } from './contract/types.js';
+import type { ApiErrorCode, ApiErrorIssue, ApiErrorResponse, JsonValue } from './contract/types.js';
 
+/**
+ * `FORBIDDEN` is what an authenticator answers when it knows who the caller is and refuses them. A
+ * 401 there would tell a signed-in user to sign in again.
+ */
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
   PREVIEW_UNAVAILABLE: 409,
@@ -29,6 +34,14 @@ export class ApiError extends Error {
     this.details = details;
   }
 
+  static unauthorized(message: string): ApiError {
+    return new ApiError('UNAUTHORIZED', message);
+  }
+
+  static forbidden(message: string): ApiError {
+    return new ApiError('FORBIDDEN', message);
+  }
+
   static notFound(message: string): ApiError {
     return new ApiError('NOT_FOUND', message);
   }
@@ -37,8 +50,19 @@ export class ApiError extends Error {
     return new ApiError('CONFLICT', message);
   }
 
-  static badRequest(message: string, details?: JsonValue): ApiError {
-    return new ApiError('BAD_REQUEST', message, details);
+  /**
+   * A 400, which always carries `details.issues`.
+   *
+   * Every invalid input answers in the same shape, so a client reads one list whatever it got
+   * wrong. A failure that is not about one field is a single issue with an empty path repeating
+   * the message. `context` adds keys next to `issues`.
+   */
+  static badRequest(
+    message: string,
+    issues: ApiErrorIssue[] = [{ path: '', message }],
+    context: { [key: string]: JsonValue } = {},
+  ): ApiError {
+    return new ApiError('BAD_REQUEST', message, { ...context, issues });
   }
 
   toResponseBody(): ApiErrorResponse {
@@ -50,6 +74,42 @@ export class ApiError extends Error {
       },
     };
   }
+}
+
+/**
+ * The 400 for input that failed validation, wherever in the request it was: a body field, a query
+ * or path parameter, or the body as a whole (an empty path).
+ */
+export function invalidRequest(
+  issues: readonly { path: readonly PropertyKey[]; message: string }[],
+): ApiError {
+  return ApiError.badRequest(
+    'Invalid request.',
+    issues.map((issue) => ({ path: issue.path.map(String).join('.'), message: issue.message })),
+  );
+}
+
+/**
+ * The contract error `error` stands for, or `undefined` when it is not one.
+ *
+ * An `ApiError` from this package is one. So is an error shaped like one — named `ApiError`,
+ * carrying a code this contract defines — because an `ApiError` class from another copy of this
+ * package, or from the other VintaSend API package, is not this class. That is the ordinary case
+ * for a host passing one `authenticate` to both APIs: whichever package it imported `ApiError`
+ * from, the other one sees a stranger, and an `instanceof` check would answer its 401 with a 500.
+ */
+export function asApiError(error: unknown): ApiError | undefined {
+  if (error instanceof ApiError) {
+    return error;
+  }
+  if (!(error instanceof Error) || error.name !== 'ApiError') {
+    return undefined;
+  }
+  const { code, details } = error as Error & { code?: unknown; details?: JsonValue };
+  if (typeof code !== 'string' || !Object.hasOwn(STATUS_BY_CODE, code)) {
+    return undefined;
+  }
+  return new ApiError(code as ApiErrorCode, error.message, details);
 }
 
 export function errorMessage(error: unknown): string {

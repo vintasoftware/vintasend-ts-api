@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.js';
+import { apiKeyAuthenticator } from '../src/middleware/authenticate.js';
 import type { TemplateSourceClient } from '../src/services/notification-preview.js';
 import type { NotificationServicePort } from '../src/services/notification-service-port.js';
 import {
@@ -22,7 +23,7 @@ function buildApp({
   backendIdentifier?: string;
 } = {}) {
   const app = createApp({
-    apiKey: TEST_API_KEY,
+    authenticate: apiKeyAuthenticator(TEST_API_KEY),
     getService: async () => service,
     getTemplateClient: () => templateClient,
     backendIdentifier,

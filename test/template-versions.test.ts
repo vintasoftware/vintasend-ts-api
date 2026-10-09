@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { DataResponse, NotificationDetail, PaginatedResponse } from '../src/contract/types.js';
 import { buildBackendFilter } from '../src/domain/filters.js';
+import { apiKeyAuthenticator } from '../src/middleware/authenticate.js';
 import {
   authHeaders,
   makeService,
@@ -24,7 +25,7 @@ import {
 
 function appWith(service: ReturnType<typeof makeService>) {
   return createApp({
-    apiKey: TEST_API_KEY,
+    authenticate: apiKeyAuthenticator(TEST_API_KEY),
     getService: async () => service,
     getTemplateClient: makeTemplateClient,
   });

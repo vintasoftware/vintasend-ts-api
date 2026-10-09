@@ -98,6 +98,25 @@ describe('GitHubTemplateClient', () => {
     expect(calledUrl).toContain('a'.repeat(40));
   });
 
+  it('decodes the content as UTF-8, line breaks and all', async () => {
+    // GitHub wraps its base64 at 60 columns; the decoding is Web APIs only, so it is pinned here.
+    const template = 'p Olá, {{ name }} — confirmação ✓\n'.repeat(4);
+    const wrapped = Buffer.from(template)
+      .toString('base64')
+      .replace(/(.{60})/g, '$1\n');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: wrapped, encoding: 'base64' }),
+    });
+
+    const content = await makeClient(fetchMock).getTemplateContentByCommit({
+      templatePath: 'emails/welcome.pug',
+      gitCommitSha: 'b'.repeat(40),
+    });
+
+    expect(content).toBe(template);
+  });
+
   it('returns a deterministic safe error for not-found responses', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,

@@ -26,6 +26,15 @@ export type TemplateContentRequest = {
   gitCommitSha: string;
 };
 
+/**
+ * Decode GitHub's base64 file content as UTF-8, with Web APIs only, so the client works wherever
+ * `fetch` does and not just in Node.
+ */
+function decodeBase64Utf8(base64: string): string {
+  const binary = atob(base64);
+  return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
+}
+
 export class GitHubTemplateClient {
   private readonly cacheMaxEntries: number;
 
@@ -66,7 +75,7 @@ export class GitHubTemplateClient {
       throw new Error('GitHub template response is invalid or unsupported.');
     }
 
-    const decoded = Buffer.from(payload.content.replace(/\n/g, ''), 'base64').toString('utf8');
+    const decoded = decodeBase64Utf8(payload.content.replace(/\n/g, ''));
     this.setCache(cacheKey, decoded);
     return decoded;
   }

@@ -56,11 +56,10 @@ export const notificationListQuerySchema = paginationQuerySchema.extend({
   orderByDirection: orderByDirectionSchema.optional(),
 });
 
-export const resendBodySchema = z
-  .object({
-    useStoredContext: z.boolean().default(false),
-  })
-  .default({ useStoredContext: false });
+/** Body of `POST /notifications/{id}/resend`. Optional: an omitted body regenerates the context. */
+export const resendBodySchema = z.object({
+  useStoredContext: z.boolean().default(false),
+});
 
 export type NotificationListQueryInput = z.infer<typeof notificationListQuerySchema>;
 export type PaginationQueryInput = z.infer<typeof paginationQuerySchema>;
