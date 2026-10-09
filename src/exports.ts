@@ -1,10 +1,12 @@
 /**
  * Public entrypoint for mounting the API inside a host's own server, and for sharing the wire
  * contract with TypeScript clients.
+ *
+ * It imports no Node built-in, so it loads wherever `fetch` does, a browser included. The
+ * standalone server's pieces are on `./server`.
  */
 
 export { API_BASE_PATH, type AppDependencies, createApp } from './app.js';
-export { loadServerConfig, type ServerConfig } from './config.js';
 export * from './contract/types.js';
 export { ApiError, invalidRequest } from './errors.js';
 export {
@@ -12,6 +14,7 @@ export {
   type Authenticator,
   apiKeyAuthenticator,
   authenticated,
+  bearerToken,
 } from './middleware/authenticate.js';
 export {
   logUnhandledError,
@@ -27,4 +30,3 @@ export {
   asNotificationServicePort,
   type NotificationServicePort,
 } from './services/notification-service-port.js';
-export { createServiceProvider, loadNotificationService } from './services/service-loader.js';

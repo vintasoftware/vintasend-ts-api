@@ -38,6 +38,19 @@ npm install vintasend-api vintasend
 Install the same release line for both: the API is released together with
 `vintasend`, and its version matches.
 
+The standalone server also needs `@hono/node-server`. It is an optional peer
+dependency, so a host that mounts `createApp` in its own server does not install
+a Node HTTP server it never starts:
+
+```bash
+npm install @hono/node-server   # only to run the vintasend-api command
+```
+
+`vintasend-api` holds `createApp`, the authenticators, `ApiError` and the wire
+types, and loads in a browser. `vintasend-api/server` holds what the standalone
+command is built from: `loadServerConfig` and the service-module loader. It is
+Node only.
+
 ## Architecture
 
 ```
@@ -146,11 +159,14 @@ either package: both recognise an error by its name and code, not by its class.
 Throw `ApiError.unauthorized` for a caller with no valid credential and
 `ApiError.forbidden` for one you know and refuse: a 401 would tell a signed-in
 user to sign in again. For one shared secret, pass
-`authenticate: apiKeyAuthenticator(key)`, which compares in constant time.
+`authenticate: apiKeyAuthenticator(key)`, which compares in constant time. To
+check a token yourself, such as the caller's own identity-provider token, read it
+with `bearerToken(c.req.header('authorization'))`, which is `null` when the
+request carries none.
 
 The app uses Web APIs only — no Node built-ins — so it runs wherever `fetch`
-does. The standalone server and the module-path service loader are the Node-only
-parts, and `createApp` loads neither.
+does. The standalone server and the module-path service loader on `./server` are
+the Node-only parts, and the package entry loads neither.
 
 An unexpected error is reported to the client as a generic 500 with an
 `X-Request-Id` header. By default it is logged as one line — the error's name,
