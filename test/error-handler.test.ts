@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.js';
+import { apiKeyAuthenticator } from '../src/middleware/authenticate.js';
 import { authHeaders, makeService, makeTemplateClient, TEST_API_KEY } from './helpers/fixtures.js';
 
 describe('unhandled errors', () => {
@@ -15,7 +16,7 @@ describe('unhandled errors', () => {
       getNotification: vi.fn().mockRejectedValue(new TypeError(sensitive)),
     });
     return createApp({
-      apiKey: TEST_API_KEY,
+      authenticate: apiKeyAuthenticator(TEST_API_KEY),
       getService: async () => service,
       getTemplateClient: () => makeTemplateClient(),
     });

@@ -43,18 +43,27 @@ export type NotificationRoutesDependencies = {
   backendIdentifier?: string | undefined;
 };
 
-function paginate(
-  notifications: ApiAnyDatabaseNotification[],
+/**
+ * One page of a listing, and whether the next page has a row.
+ *
+ * Backends are not required to count, so that is asked directly: a full page is followed by a
+ * one-row read of the first row after it, which is page `page * pageSize + 1` of one-row pages. A
+ * short page is the last one without asking. `read` takes the contract's 1-indexed pages.
+ */
+async function paginate(
+  read: (page: number, pageSize: number) => Promise<ApiAnyDatabaseNotification[]>,
   page: number,
   pageSize: number,
-): PaginatedResponse<Notification> {
-  const data = notifications.map(serializeNotification);
+): Promise<PaginatedResponse<Notification>> {
+  const notifications = await read(page, pageSize);
+  const hasMore =
+    notifications.length === pageSize && (await read(page * pageSize + 1, 1)).length > 0;
 
   return {
-    data,
+    data: notifications.map(serializeNotification),
     page,
     pageSize,
-    hasMore: data.length === pageSize,
+    hasMore,
   };
 }
 
@@ -100,38 +109,37 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
     const reader = await readerFor();
     const capabilities = await reader.capabilities();
 
-    const notifications = await reader.filterNotifications(
-      buildBackendFilter(query, capabilities),
-      query.page,
-      query.pageSize,
-      buildOrderBy(query, capabilities),
-    );
+    const filter = buildBackendFilter(query, capabilities);
+    const orderBy = buildOrderBy(query, capabilities);
 
-    return c.json(paginate(notifications, query.page, query.pageSize));
+    return c.json(
+      await paginate(
+        (page, pageSize) => reader.filterNotifications(filter, page, pageSize, orderBy),
+        query.page,
+        query.pageSize,
+      ),
+    );
   });
 
   routes.get('/notifications/pending', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
     const reader = await readerFor();
-    const notifications = await reader.getPendingNotifications(page, pageSize);
 
-    return c.json(paginate(notifications, page, pageSize));
+    return c.json(await paginate(reader.getPendingNotifications, page, pageSize));
   });
 
   routes.get('/notifications/future', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
     const reader = await readerFor();
-    const notifications = await reader.getFutureNotifications(page, pageSize);
 
-    return c.json(paginate(notifications, page, pageSize));
+    return c.json(await paginate(reader.getFutureNotifications, page, pageSize));
   });
 
   routes.get('/notifications/one-off', validate('query', paginationQuerySchema), async (c) => {
     const { page, pageSize } = c.req.valid('query');
     const reader = await readerFor();
-    const notifications = await reader.getOneOffNotifications(page, pageSize);
 
-    return c.json(paginate(notifications, page, pageSize));
+    return c.json(await paginate(reader.getOneOffNotifications, page, pageSize));
   });
 
   routes.get('/notifications/:id', async (c) => {
