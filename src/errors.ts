@@ -1,3 +1,5 @@
+import { isNotificationActionError } from 'vintasend';
+
 import type { ApiErrorCode, ApiErrorIssue, ApiErrorResponse, JsonValue } from './contract/types.js';
 
 /**
@@ -110,6 +112,21 @@ export function asApiError(error: unknown): ApiError | undefined {
     return undefined;
   }
   return new ApiError(code as ApiErrorCode, error.message, details);
+}
+
+/**
+ * The contract error for a re-queue or re-pin the service refused, or `undefined` for any other
+ * error.
+ *
+ * The service's message names the notification by ID and nothing else, so it is passed on as is.
+ */
+export function fromNotificationActionError(error: unknown): ApiError | undefined {
+  if (!isNotificationActionError(error)) {
+    return undefined;
+  }
+  return error.reason === 'NOT_FOUND'
+    ? ApiError.notFound(error.message)
+    : ApiError.conflict(error.message);
 }
 
 export function errorMessage(error: unknown): string {

@@ -61,6 +61,24 @@ export const resendBodySchema = z.object({
   useStoredContext: z.boolean().default(false),
 });
 
+/**
+ * Body of `POST /notifications/{id}/requeue`. Optional: an omitted `sendAfter` keeps the
+ * notification's own schedule, and `null` sends it as soon as it is re-queued.
+ */
+export const requeueBodySchema = z.object({
+  sendAfter: isoDateSchema.nullable().optional(),
+});
+
+/**
+ * Body of `POST /notifications/{id}/repin`. Optional: an omitted `templateVersion` pins the
+ * version the renderer reports as current. `min(0)` for the same reason as the list filter.
+ */
+export const repinBodySchema = z.object({
+  templateVersion: z.number().int().min(0).optional(),
+});
+
 export type NotificationListQueryInput = z.infer<typeof notificationListQuerySchema>;
 export type PaginationQueryInput = z.infer<typeof paginationQuerySchema>;
 export type ResendBodyInput = z.infer<typeof resendBodySchema>;
+export type RequeueBodyInput = z.infer<typeof requeueBodySchema>;
+export type RepinBodyInput = z.infer<typeof repinBodySchema>;

@@ -81,6 +81,24 @@ export interface NotificationServicePort {
 
   cancelNotification(notificationId: string): Promise<void>;
 
+  /**
+   * Puts a `FAILED` or `CANCELLED` notification back into `PENDING_SEND`, sending it at once when
+   * it is due. Throws a `NotificationActionError` when refused.
+   */
+  requeueNotification(
+    notificationId: string,
+    options?: { sendAfter?: Date | null },
+  ): Promise<ApiAnyDatabaseNotification>;
+
+  /**
+   * Pins a notification that has not been delivered to a template version, the current one by
+   * default. Throws a `NotificationActionError` when refused.
+   */
+  repinNotification(
+    notificationId: string,
+    options?: { templateVersion?: number },
+  ): Promise<ApiAnyDatabaseNotification>;
+
   renderEmailTemplateFromContent(
     notification: ApiAnyDatabaseNotification,
     templateContent: EmailTemplateContent,

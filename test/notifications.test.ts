@@ -1,3 +1,4 @@
+import { NotificationActionError } from 'vintasend';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.js';
@@ -566,6 +567,156 @@ describe('POST /api/v1/notifications/:id/cancel', () => {
     const { app } = buildApp();
 
     expect((await post(app, '/api/v1/notifications/missing/cancel')).status).toBe(404);
+  });
+});
+
+function actionError(reason: 'NOT_FOUND' | 'INVALID_STATUS' | 'NO_TEMPLATE_VERSION') {
+  return new NotificationActionError({
+    action: 'requeue',
+    reason,
+    notificationId: 'notif-1',
+    message: `Refused: ${reason}`,
+  });
+}
+
+describe('POST /api/v1/notifications/:id/requeue', () => {
+  it('requeues and returns the notification', async () => {
+    const { app, service } = buildApp();
+
+    const response = await post(app, '/api/v1/notifications/notif-1/requeue');
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(service.requeueNotification).toHaveBeenCalledWith('notif-1', {});
+    expect(body.data).toMatchObject({ kind: 'user', id: 'notif-1', status: 'PENDING_SEND' });
+  });
+
+  it('passes sendAfter through as a date', async () => {
+    const { app, service } = buildApp();
+
+    await post(app, '/api/v1/notifications/notif-1/requeue', {
+      sendAfter: '2999-01-01T00:00:00.000Z',
+    });
+
+    expect(service.requeueNotification).toHaveBeenCalledWith('notif-1', {
+      sendAfter: new Date('2999-01-01T00:00:00.000Z'),
+    });
+  });
+
+  it('passes a null sendAfter through, meaning now', async () => {
+    const { app, service } = buildApp();
+
+    await post(app, '/api/v1/notifications/notif-1/requeue', { sendAfter: null });
+
+    expect(service.requeueNotification).toHaveBeenCalledWith('notif-1', { sendAfter: null });
+  });
+
+  it('serializes a requeued one-off notification', async () => {
+    const service = makeService({
+      requeueNotification: vi.fn().mockResolvedValue(makeOneOffNotification()),
+    });
+    const { app } = buildApp({ service });
+
+    const body = await (await post(app, '/api/v1/notifications/notif-1/requeue')).json();
+
+    expect(body.data.kind).toBe('one-off');
+  });
+
+  it('404s when the service finds no notification', async () => {
+    const service = makeService({
+      requeueNotification: vi.fn().mockRejectedValue(actionError('NOT_FOUND')),
+    });
+    const { app } = buildApp({ service });
+
+    const response = await post(app, '/api/v1/notifications/missing/requeue');
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: 'NOT_FOUND' } });
+  });
+
+  it('409s when the status does not allow it', async () => {
+    const service = makeService({
+      requeueNotification: vi.fn().mockRejectedValue(actionError('INVALID_STATUS')),
+    });
+    const { app } = buildApp({ service });
+
+    const response = await post(app, '/api/v1/notifications/notif-1/requeue');
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'CONFLICT', message: 'Refused: INVALID_STATUS' },
+    });
+  });
+
+  it('answers any other failure with a generic 500', async () => {
+    const service = makeService({
+      requeueNotification: vi.fn().mockRejectedValue(new Error('db credentials')),
+    });
+    const { app } = buildApp({ service });
+
+    const response = await post(app, '/api/v1/notifications/notif-1/requeue');
+
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(await response.json())).not.toContain('db credentials');
+  });
+
+  it('rejects a sendAfter that is not a date', async () => {
+    const { app, service } = buildApp();
+
+    const response = await post(app, '/api/v1/notifications/notif-1/requeue', {
+      sendAfter: 'tomorrow-ish',
+    });
+
+    expect(response.status).toBe(400);
+    expect(service.requeueNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/notifications/:id/repin', () => {
+  it('repins to the current version when no version is given', async () => {
+    const { app, service } = buildApp();
+
+    const response = await post(app, '/api/v1/notifications/notif-1/repin');
+
+    expect(response.status).toBe(200);
+    expect(service.repinNotification).toHaveBeenCalledWith('notif-1', {});
+  });
+
+  it('repins to the version the caller names', async () => {
+    const { app, service } = buildApp();
+
+    await post(app, '/api/v1/notifications/notif-1/repin', { templateVersion: 0 });
+
+    expect(service.repinNotification).toHaveBeenCalledWith('notif-1', { templateVersion: 0 });
+  });
+
+  it.each(['INVALID_STATUS', 'NO_TEMPLATE_VERSION'] as const)('409s on %s', async (reason) => {
+    const service = makeService({
+      repinNotification: vi.fn().mockRejectedValue(actionError(reason)),
+    });
+    const { app } = buildApp({ service });
+
+    const response = await post(app, '/api/v1/notifications/notif-1/repin');
+
+    expect(response.status).toBe(409);
+  });
+
+  it('404s when the service finds no notification', async () => {
+    const service = makeService({
+      repinNotification: vi.fn().mockRejectedValue(actionError('NOT_FOUND')),
+    });
+    const { app } = buildApp({ service });
+
+    expect((await post(app, '/api/v1/notifications/missing/repin')).status).toBe(404);
+  });
+
+  it.each([-1, 1.5, '3'])('rejects templateVersion %s', async (templateVersion) => {
+    const { app, service } = buildApp();
+
+    const response = await post(app, '/api/v1/notifications/notif-1/repin', { templateVersion });
+
+    expect(response.status).toBe(400);
+    expect(service.repinNotification).not.toHaveBeenCalled();
   });
 });
 

@@ -84,6 +84,8 @@ authentication.
 | GET | `/api/v1/notifications/{id}/preview` | Templates rendered at the notification's commit |
 | POST | `/api/v1/notifications/{id}/resend` | Resend a notification |
 | POST | `/api/v1/notifications/{id}/cancel` | Cancel a pending notification |
+| POST | `/api/v1/notifications/{id}/requeue` | Put a failed or cancelled notification back in the queue |
+| POST | `/api/v1/notifications/{id}/repin` | Pin a notification that has not been delivered to a template version |
 
 Conventions worth knowing when implementing this contract elsewhere:
 

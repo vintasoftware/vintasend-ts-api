@@ -69,6 +69,12 @@ export function makeService(overrides: Record<string, unknown> = {}): Notificati
     getOneOffNotification: vi.fn().mockResolvedValue(null),
     resendNotification: vi.fn().mockResolvedValue(undefined),
     cancelNotification: vi.fn().mockResolvedValue(undefined),
+    requeueNotification: vi
+      .fn()
+      .mockResolvedValue(makeUserNotification({ status: 'PENDING_SEND', sentAt: null })),
+    repinNotification: vi
+      .fn()
+      .mockResolvedValue(makeUserNotification({ status: 'PENDING_SEND', sentAt: null })),
     renderEmailTemplateFromContent: vi
       .fn()
       .mockResolvedValue({ subject: '<h1>Subject</h1>', body: '<p>Body</p>' }),
