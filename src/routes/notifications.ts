@@ -20,6 +20,8 @@ import { buildBackendFilter, buildOrderBy } from '../domain/filters.js';
 import {
   notificationListQuerySchema,
   paginationQuerySchema,
+  repinBodySchema,
+  requeueBodySchema,
   resendBodySchema,
 } from '../domain/schemas.js';
 import {
@@ -27,7 +29,7 @@ import {
   serializeNotificationDetail,
   serializeUserNotification,
 } from '../domain/serialize.js';
-import { ApiError } from '../errors.js';
+import { ApiError, fromNotificationActionError } from '../errors.js';
 import type { TemplateSourceClient } from '../services/notification-preview.js';
 import { buildNotificationPreview } from '../services/notification-preview.js';
 import type {
@@ -70,6 +72,19 @@ async function paginate(
 /**
  * Looks a notification up as a user notification first, then as a one-off one.
  */
+/**
+ * Runs a re-queue or re-pin, answering the service's refusals with the contract's 404 and 409.
+ */
+async function runNotificationAction(
+  action: () => Promise<ApiAnyDatabaseNotification>,
+): Promise<ApiAnyDatabaseNotification> {
+  try {
+    return await action();
+  } catch (error) {
+    throw fromNotificationActionError(error) ?? error;
+  }
+}
+
 async function findNotification(
   service: NotificationServicePort,
   id: string,
@@ -193,6 +208,36 @@ export function createNotificationRoutes(deps: NotificationRoutesDependencies): 
     return c.json<DataResponse<CancelledNotification>>({
       data: { id, status: 'CANCELLED' },
     });
+  });
+
+  routes.post('/notifications/:id/requeue', validate('json', requeueBodySchema), async (c) => {
+    const { sendAfter } = c.req.valid('json');
+    const service = await deps.getService();
+
+    const requeued = await runNotificationAction(() =>
+      service.requeueNotification(
+        c.req.param('id'),
+        sendAfter === undefined
+          ? {}
+          : { sendAfter: sendAfter === null ? null : new Date(sendAfter) },
+      ),
+    );
+
+    return c.json<DataResponse<Notification>>({ data: serializeNotification(requeued) });
+  });
+
+  routes.post('/notifications/:id/repin', validate('json', repinBodySchema), async (c) => {
+    const { templateVersion } = c.req.valid('json');
+    const service = await deps.getService();
+
+    const repinned = await runNotificationAction(() =>
+      service.repinNotification(
+        c.req.param('id'),
+        templateVersion === undefined ? {} : { templateVersion },
+      ),
+    );
+
+    return c.json<DataResponse<Notification>>({ data: serializeNotification(repinned) });
   });
 
   return routes;
