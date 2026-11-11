@@ -15,9 +15,12 @@ import type {
   EmailTemplate,
   EmailTemplateContent,
   JsonObject,
+  NotificationActionCapabilities,
+  NotificationFilter,
   NotificationFilterCapabilities,
   NotificationFilterFields,
   NotificationOrderBy,
+  NotificationVersion,
 } from 'vintasend';
 
 export type ApiNotificationConfig = BaseNotificationTypeConfig;
@@ -26,6 +29,19 @@ export type ApiDatabaseNotification = DatabaseNotification<ApiNotificationConfig
 export type ApiDatabaseOneOffNotification = DatabaseOneOffNotification<ApiNotificationConfig>;
 export type ApiAnyDatabaseNotification = AnyDatabaseNotification<ApiNotificationConfig>;
 export type ApiNotificationFilterFields = NotificationFilterFields<ApiNotificationConfig>;
+export type ApiNotificationFilter = NotificationFilter<ApiNotificationConfig>;
+
+export type ApiRequeueOptions = {
+  sendAfter?: Date | null;
+  templateVersion?: number;
+  expectedVersion?: string;
+  send?: boolean;
+};
+
+export type ApiRepinOptions = {
+  templateVersion?: number;
+  expectedVersion?: string;
+};
 
 export type RenderContextInput =
   | { context: JsonObject }
@@ -83,21 +99,49 @@ export interface NotificationServicePort {
 
   /**
    * Puts a `FAILED` or `CANCELLED` notification back into `PENDING_SEND`, sending it at once when
-   * it is due. Throws a `NotificationActionError` when refused.
+   * it is due unless `send` is `false`. `templateVersion` pins it in the same write and
+   * `expectedVersion` refuses if it changed since it was listed. Throws a
+   * `NotificationActionError` when refused.
+   *
+   * A VintaSend older than these options would ignore them, so this API passes `templateVersion`,
+   * `expectedVersion` and `send` only to a service with `getBackendSupportedActionCapabilities`,
+   * and refuses them otherwise.
    */
   requeueNotification(
     notificationId: string,
-    options?: { sendAfter?: Date | null },
+    options?: ApiRequeueOptions,
   ): Promise<ApiAnyDatabaseNotification>;
 
   /**
    * Pins a notification that has not been delivered to a template version, the current one by
-   * default. Throws a `NotificationActionError` when refused.
+   * default, refusing if it changed since `expectedVersion`. Throws a `NotificationActionError`
+   * when refused.
    */
   repinNotification(
     notificationId: string,
-    options?: { templateVersion?: number },
+    options?: ApiRepinOptions,
   ): Promise<ApiAnyDatabaseNotification>;
+
+  /**
+   * IDs and version tokens of the notifications matching `filter`, without their content.
+   *
+   * Optional, so a host adapting a service that predates it still satisfies the port; this API
+   * then reports `versions.filter: false` and refuses the search.
+   */
+  filterNotificationVersions?(
+    filter: ApiNotificationFilter,
+    page: number,
+    pageSize: number,
+    backendIdentifier?: string,
+  ): Promise<NotificationVersion<ApiNotificationConfig>[]>;
+
+  /**
+   * Which optional notification actions the backend supports. Optional for the same reason;
+   * without it every action capability reads `false`.
+   */
+  getBackendSupportedActionCapabilities?(
+    backendIdentifier?: string,
+  ): Promise<NotificationActionCapabilities>;
 
   renderEmailTemplateFromContent(
     notification: ApiAnyDatabaseNotification,

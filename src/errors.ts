@@ -118,15 +118,26 @@ export function asApiError(error: unknown): ApiError | undefined {
  * The contract error for a re-queue or re-pin the service refused, or `undefined` for any other
  * error.
  *
- * The service's message names the notification by ID and nothing else, so it is passed on as is.
+ * `NOT_FOUND` is a 404 and every other refusal a 409 `CONFLICT`. Both carry the service's reason
+ * as `details.reason` (`INVALID_STATUS`, `NO_TEMPLATE_VERSION`, `CHANGED`, `UNSUPPORTED`), so a
+ * client can tell "it changed since you listed it" from "it cannot move". The service's message
+ * names the notification by ID and nothing else, so it is passed on as is.
  */
 export function fromNotificationActionError(error: unknown): ApiError | undefined {
   if (!isNotificationActionError(error)) {
     return undefined;
   }
-  return error.reason === 'NOT_FOUND'
-    ? ApiError.notFound(error.message)
-    : ApiError.conflict(error.message);
+  return new ApiError(error.reason === 'NOT_FOUND' ? 'NOT_FOUND' : 'CONFLICT', error.message, {
+    reason: error.reason,
+  });
+}
+
+/**
+ * The 409 for something the configured backend, or the service in front of it, cannot do. Shaped
+ * like the service's own `UNSUPPORTED` refusal.
+ */
+export function unsupported(message: string): ApiError {
+  return new ApiError('CONFLICT', message, { reason: 'UNSUPPORTED' });
 }
 
 export function errorMessage(error: unknown): string {

@@ -12,8 +12,11 @@ import type {
   NotificationOrderBy,
   StringFieldFilter,
 } from 'vintasend';
-import type { ApiNotificationFilterFields } from '../services/notification-service-port.js';
-import type { NotificationListQueryInput } from './schemas.js';
+import type {
+  ApiNotificationFilter,
+  ApiNotificationFilterFields,
+} from '../services/notification-service-port.js';
+import type { FilterInput, NotificationListQueryInput } from './schemas.js';
 
 export const DEFAULT_ORDER_BY_FIELD = 'createdAt' as const;
 export const DEFAULT_ORDER_BY_DIRECTION = 'desc' as const;
@@ -91,6 +94,87 @@ export function buildBackendFilter(
   }
 
   return filter;
+}
+
+const DATE_RANGE_FIELDS = [
+  'sendAfterRange',
+  'createdAtRange',
+  'sentAtRange',
+  'readAtRange',
+] as const;
+
+/**
+ * A search filter from the wire as VintaSend takes it: the same tree, with each range's ISO
+ * strings turned into dates.
+ */
+export function toBackendFilter(filter: FilterInput): ApiNotificationFilter {
+  if ('and' in filter) return { and: filter.and.map(toBackendFilter) };
+  if ('or' in filter) return { or: filter.or.map(toBackendFilter) };
+  if ('not' in filter) return { not: toBackendFilter(filter.not) };
+
+  const fields: Record<string, unknown> = { ...filter };
+  for (const key of DATE_RANGE_FIELDS) {
+    const range = filter[key];
+    if (range !== undefined) {
+      fields[key] = {
+        ...(range.from === undefined ? {} : { from: new Date(range.from) }),
+        ...(range.to === undefined ? {} : { to: new Date(range.to) }),
+      };
+    }
+  }
+  return fields as ApiNotificationFilterFields;
+}
+
+/**
+ * Everything in `filter` the backend reports it cannot do, as 400 issues; empty when it can do all
+ * of it.
+ *
+ * Checked up front because a backend refuses such a filter with a plain error, which would reach
+ * the client as a 500. Reads `logical.and`, `logical.or`, `logical.not`, `logical.notNested` (a
+ * `not` around a group), `fields.<field>` and, under a `not`, `negation.<field>`. A key the report
+ * leaves out counts as supported, as VintaSend's capability map does.
+ */
+export function unsupportedFilterFeatures(
+  filter: FilterInput,
+  capabilities: NotificationFilterCapabilities,
+  path = 'filter',
+  negated = false,
+): { path: string; message: string }[] {
+  const refuses = (key: string) => capabilities[key] === false;
+  const issue = (at: string, key: string) => ({
+    path: at,
+    message: `The backend does not support ${key}.`,
+  });
+
+  if ('and' in filter || 'or' in filter) {
+    const operator = 'and' in filter ? 'and' : 'or';
+    const children = 'and' in filter ? filter.and : (filter as { or: FilterInput[] }).or;
+    return [
+      ...(refuses(`logical.${operator}`)
+        ? [issue(`${path}.${operator}`, `logical.${operator}`)]
+        : []),
+      ...(negated && refuses('logical.notNested') ? [issue(path, 'logical.notNested')] : []),
+      ...children.flatMap((child, index) =>
+        unsupportedFilterFeatures(child, capabilities, `${path}.${operator}.${index}`, negated),
+      ),
+    ];
+  }
+
+  if ('not' in filter) {
+    return [
+      ...(refuses('logical.not') ? [issue(`${path}.not`, 'logical.not')] : []),
+      ...(negated && refuses('logical.notNested') ? [issue(path, 'logical.notNested')] : []),
+      ...unsupportedFilterFeatures(filter.not, capabilities, `${path}.not`, true),
+    ];
+  }
+
+  return Object.keys(filter).flatMap((field) => {
+    const key = negated ? `negation.${field}` : `fields.${field}`;
+    const found = [];
+    if (refuses(`fields.${field}`)) found.push(issue(`${path}.${field}`, `fields.${field}`));
+    if (negated && refuses(key)) found.push(issue(`${path}.${field}`, key));
+    return found;
+  });
 }
 
 export function buildOrderBy(

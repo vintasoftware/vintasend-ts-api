@@ -86,6 +86,38 @@ authentication.
 | POST | `/api/v1/notifications/{id}/cancel` | Cancel a pending notification |
 | POST | `/api/v1/notifications/{id}/requeue` | Put a failed or cancelled notification back in the queue |
 | POST | `/api/v1/notifications/{id}/repin` | Pin a notification that has not been delivered to a template version |
+| POST | `/api/v1/notifications/versions` | IDs and version tokens matching a filter, without their content |
+
+### Moving notifications onto a new template version
+
+To move a template's failed emails onto version 4 without reading them, and without moving one
+that changed after it was listed:
+
+```bash
+curl -X POST "$API/api/v1/notifications/versions" -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"filter": {"bodyTemplate": "welcome", "status": "FAILED"}, "pageSize": 500}'
+# {"data":[{"id":"42","version":"2026-11-10T12:00:00.000Z"}, ...], "page":1, "pageSize":500, "hasMore":false}
+
+curl -X POST "$API/api/v1/notifications/42/requeue" -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"templateVersion": 4, "expectedVersion": "2026-11-10T12:00:00.000Z", "send": false}'
+```
+
+- **`POST /notifications/versions`** takes VintaSend's composable filter as JSON (`and`, `or`,
+  `not`, at most six levels; exact strings; ISO dates; `hasSendAfter` and
+  `hasRequestedTemplateVersion`) and returns `{ id, version }` only. A filter the backend reports
+  it cannot run is a 400 naming what it cannot do. Moving notifications changes what matches, so
+  list again from page 1 rather than moving on.
+- **`requeue`** takes `templateVersion` (pin in the same write), `expectedVersion` and `send`
+  (`false` leaves it for the scheduled sender). It returns the notification after any send it
+  started, so `status` says whether it went out. **`repin`** takes `expectedVersion`.
+- **Refusals** are 409 `CONFLICT` with `details.reason`: `CHANGED` (it changed since it was
+  listed; list again), `INVALID_STATUS`, `NO_TEMPLATE_VERSION`, or `UNSUPPORTED`.
+- **`/capabilities`** includes `repin.expectedVersion`, `requeue.expectedVersion`,
+  `requeue.templateVersion` and `versions.filter`, always explicit. A service on a VintaSend that
+  predates them reports them all `false`, and this API refuses the new options with `UNSUPPORTED`
+  rather than pass them to a service that would ignore them.
 
 Conventions worth knowing when implementing this contract elsewhere:
 

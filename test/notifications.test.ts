@@ -720,6 +720,14 @@ describe('POST /api/v1/notifications/:id/repin', () => {
   });
 });
 
+/** What a service that predates the optional actions reports for them. */
+const NO_ACTIONS = {
+  'repin.expectedVersion': false,
+  'requeue.expectedVersion': false,
+  'requeue.templateVersion': false,
+  'versions.filter': false,
+};
+
 describe('GET /api/v1/capabilities', () => {
   it('returns the backend capability map', async () => {
     const service = makeService({
@@ -729,7 +737,7 @@ describe('GET /api/v1/capabilities', () => {
 
     const body = await (await get(app, '/api/v1/capabilities')).json();
 
-    expect(body).toEqual({ data: { 'orderBy.sentAt': false } });
+    expect(body).toEqual({ data: { 'orderBy.sentAt': false, ...NO_ACTIONS } });
   });
 
   it('does not publish the backend pagination convention', async () => {
@@ -744,7 +752,7 @@ describe('GET /api/v1/capabilities', () => {
 
     const body = await (await get(app, '/api/v1/capabilities')).json();
 
-    expect(body.data).toEqual({ 'orderBy.sentAt': true });
+    expect(body.data).toEqual({ 'orderBy.sentAt': true, ...NO_ACTIONS });
   });
 });
 

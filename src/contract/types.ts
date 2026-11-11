@@ -174,6 +174,75 @@ export type DataResponse<T> = {
 export type FilterCapabilities = Record<string, boolean>;
 
 /**
+ * One row of `POST /api/v1/notifications/versions`: a notification's ID and an opaque token for its
+ * current version. Pass `version` back as `expectedVersion` to requeue or repin the notification
+ * only if it has not changed since. Compare tokens for equality only.
+ */
+export type NotificationVersionEntry = {
+  id: string;
+  version: string;
+};
+
+/**
+ * A search filter for `POST /api/v1/notifications/versions`: VintaSend's `NotificationFilter`,
+ * with exact-match strings and ISO-8601 dates.
+ */
+export type NotificationSearchFilter =
+  | NotificationSearchFilterFields
+  | { and: NotificationSearchFilter[] }
+  | { or: NotificationSearchFilter[] }
+  | { not: NotificationSearchFilter };
+
+export type NotificationSearchFilterFields = {
+  status?: NotificationStatus | NotificationStatus[];
+  notificationType?: NotificationType | NotificationType[];
+  adapterUsed?: string | string[];
+  userId?: string;
+  bodyTemplate?: string;
+  subjectTemplate?: string;
+  contextName?: string;
+  tenant?: string | string[];
+  requestedTemplateVersion?: number | number[];
+  usedTemplateVersion?: number | number[];
+  /** `true`: has a send time; `false`: has none. */
+  hasSendAfter?: boolean;
+  /** `true`: pinned to some template version; `false`: unpinned. */
+  hasRequestedTemplateVersion?: boolean;
+  sendAfterRange?: { from?: string; to?: string };
+  createdAtRange?: { from?: string; to?: string };
+  sentAtRange?: { from?: string; to?: string };
+  readAtRange?: { from?: string; to?: string };
+};
+
+/** Body of `POST /api/v1/notifications/versions`. */
+export type NotificationVersionsSearch = {
+  filter?: NotificationSearchFilter;
+  page?: number;
+  /** 1 to 1000; defaults to 100. */
+  pageSize?: number;
+};
+
+/** Body of `POST /api/v1/notifications/{id}/requeue`. */
+export type RequeueNotificationRequest = {
+  /** Omitted keeps the notification's own; `null` sends it as soon as it is requeued. */
+  sendAfter?: string | null;
+  /** Pin this template version in the same write. */
+  templateVersion?: number;
+  /** Requeue only if the notification is still at this version. */
+  expectedVersion?: string;
+  /** `false` leaves it pending for the scheduled sender instead of sending it now. */
+  send?: boolean;
+};
+
+/** Body of `POST /api/v1/notifications/{id}/repin`. */
+export type RepinNotificationRequest = {
+  /** Omitted pins the version the template renderer reports as current. */
+  templateVersion?: number;
+  /** Repin only if the notification is still at this version. */
+  expectedVersion?: string;
+};
+
+/**
  * Payload of `GET /api/v1/notifications/{id}/preview` on success.
  */
 export type NotificationPreview = {
