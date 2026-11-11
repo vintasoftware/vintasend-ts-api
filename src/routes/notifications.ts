@@ -11,6 +11,7 @@ import type {
   DataResponse,
   FilterCapabilities,
   Notification,
+  NotificationActionCapability,
   NotificationDetail,
   NotificationPreview,
   NotificationVersionEntry,
@@ -103,9 +104,15 @@ const ACTION_CAPABILITIES = [
   'requeue.expectedVersion',
   'requeue.templateVersion',
   'versions.filter',
-] as const;
+] as const satisfies readonly NotificationActionCapability[];
 
 type ActionCapability = (typeof ACTION_CAPABILITIES)[number];
+
+/** Compile-time proof the list above covers the contract's type. */
+type AssertNever<T extends never> = T;
+export type UncoveredActionCapability = AssertNever<
+  Exclude<NotificationActionCapability, ActionCapability>
+>;
 
 /**
  * Refuse the newer action options for a service that would ignore them.

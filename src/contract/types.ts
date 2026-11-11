@@ -174,6 +174,29 @@ export type DataResponse<T> = {
 export type FilterCapabilities = Record<string, boolean>;
 
 /**
+ * The optional notification actions `GET /api/v1/capabilities` always reports, `true` or
+ * `false`. Unlike the filter keys, these are never left out, so a missing one comes from an API
+ * that predates them and means unsupported.
+ */
+export type NotificationActionCapability =
+  | 'repin.expectedVersion'
+  | 'requeue.expectedVersion'
+  | 'requeue.templateVersion'
+  | 'versions.filter';
+
+/**
+ * `details.reason` on a refused requeue, repin or versions search. `NOT_FOUND` comes with a 404,
+ * every other reason with a 409 `CONFLICT`. `CHANGED` means the notification moved on since it
+ * was listed: list it again rather than retry.
+ */
+export type NotificationActionRefusalReason =
+  | 'NOT_FOUND'
+  | 'INVALID_STATUS'
+  | 'NO_TEMPLATE_VERSION'
+  | 'CHANGED'
+  | 'UNSUPPORTED';
+
+/**
  * One row of `POST /api/v1/notifications/versions`: a notification's ID and an opaque token for its
  * current version. Pass `version` back as `expectedVersion` to requeue or repin the notification
  * only if it has not changed since. Compare tokens for equality only.
